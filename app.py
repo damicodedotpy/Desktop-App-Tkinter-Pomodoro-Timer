@@ -1,134 +1,82 @@
 import tkinter as tk
 from tkinter import ttk
 from collections import deque
+from frames import Timer, Settings
+
+
+COLOUR_PRIMARY = "#2e3f4f"
+COLOUR_SECONDARY = "#293846"
+COLOUR_LIGHT_BACKGROUND = "#fff"
+COLOUR_LIGHT_TEXT = "#eee"
+COLOUR_DARK_TEXT = "#8095a8"
+
 
 class PomodoroTimer(tk.Tk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.resizable(False, False)
+
+        style = ttk.Style()
+        style.theme_use("clam")
+
+        style.configure("Timer.TFrame", background=COLOUR_LIGHT_BACKGROUND)
+        style.configure("Background.TFrame", background=COLOUR_PRIMARY)
+        style.configure(
+            "TimerText.TLabel",
+            background=COLOUR_LIGHT_BACKGROUND,
+            foreground=COLOUR_DARK_TEXT,
+            font="Courier 38"
+        )
+
+        style.configure(
+            "LightText.TLabel",
+            background=COLOUR_PRIMARY,
+            foreground=COLOUR_LIGHT_TEXT,
+        )
+
+        style.configure(
+            "PomodoroButton.TButton",
+            background=COLOUR_SECONDARY,
+            foreground=COLOUR_LIGHT_TEXT,
+        )
+
+        style.map(
+            "PomodoroButton.TButton",
+            background=[("active", COLOUR_PRIMARY), ("disabled", COLOUR_LIGHT_TEXT)]
+        )
+        
+        # Main app window is a tk widget, so background is set directly
+        self["background"] = COLOUR_PRIMARY
 
         self.title("Pomodoro Timer")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
+        self.pomodoro = tk.StringVar(value=25)
+        self.long_break = tk.StringVar(value=15)
+        self.short_break = tk.StringVar(value=5)
+        self.timer_order = ["Pomodoro", "Short Break", "Pomodoro", "Short Break", "Pomodoro", "Long Break"]
+        self.timer_schedule = deque(self.timer_order)
+
         container = ttk.Frame(self)
         container.grid()
         container.columnconfigure(0, weight=1)
 
-        timer_frame = Timer(container)
+        self.frames = {}
+
+        settings_frame = Settings(container, self, lambda: self.show_frame(Timer))
+        timer_frame = Timer(container, self, lambda: self.show_frame(Settings))
+        settings_frame.grid(row=0, column=0, sticky="NESW")
         timer_frame.grid(row=0, column=0, sticky="NESW")
 
-
-class Timer(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=0)
-
-        self.current_time = tk.StringVar(value="00:10")
-        self.timer_order = ["Pomodoro", "Short Break", "Pomodoro", "Short Break", "Pomodoro", "Long Break"]
-        self.timer_schedule = deque(self.timer_order)
-        self.current_timer_label = tk.StringVar(value=self.timer_schedule[0])
-        self.timer_running = False
-        self._timer_decrement_job = None
-
-        timer_description = ttk.Label(
-            self,
-            textvariable=self.current_timer_label
-        )
-
-        timer_description.grid(row=0, column=0, sticky="W", padx=(10, 0), pady=(10, 0))
-
-        timer_frame = ttk.Frame(self, height="100")
-        timer_frame.grid(pady=(10, 0), sticky="NSEW")
-
-        timer_counter = ttk.Label(
-            timer_frame,
-            textvariable=self.current_time
-        )
-        timer_counter.place(relx=0.5, rely=0.5, anchor="center")
-
-        button_container = ttk.Frame(self, padding=10)
-        button_container.grid(row=2, column=0, sticky="EW")
-        button_container.columnconfigure((0, 1, 2), weight=1)
-
-        self.start_button = ttk.Button(
-            button_container,
-            text="Start",
-            command=self.start_timer,
-            cursor="hand2"
-        )
-
-        self.start_button.grid(row=0, column=0, sticky="EW")
-
-        self.stop_button = ttk.Button(
-            button_container,
-            text="Stop",
-            state="disabled",
-            command=self.stop_timer,
-            cursor="hand2"
-        )
-
-        self.stop_button.grid(row=0, column=1, sticky="EW", padx=5)
-
-        reset_button = ttk.Button(
-            button_container,
-            text="Reset",
-            command=self.reset_timer,
-            cursor="hand2"
-        )
-
-        reset_button.grid(row=0, column=2, sticky="EW")
-    
-    def start_timer(self):
-        self.timer_running = True
-        self.start_button["state"] = "disabled"
-        self.stop_button["state"] = "enabled"
-        self.decrement_time()
-
-    def stop_timer(self):
-        self.timer_running = False
-        self.start_button["state"] = "enabled"
-        self.stop_button["state"] = "disabled"
+        self.frames[Settings] = settings_frame
+        self.frames[Timer] = timer_frame
         
-        if self._timer_decrement_job:
-            self.after_cancel(self._timer_decrement_job)
-            self._timer_decrement_job = None
-    
-    def reset_timer(self):
-        self.stop_timer()
-        current_time = self.current_time.set("25:00")
-        self.timer_schedule = deque(self.timer_order)
-        self.current_timer_label.set(self.timer_schedule[0])
+        self.show_frame(Timer)
 
-    def decrement_time(self):
-        current_time = self.current_time.get()
-
-        if self.timer_running and current_time != "00:00":            
-            minutes, seconds = current_time.split(":")
-
-            if int(seconds) > 0:
-                seconds = int(seconds) - 1
-                minutes = int(minutes)
-            else:
-                seconds = 59
-                minutes = int(minutes) - 1
-
-            self.current_time.set(f"{minutes:02d}:{seconds:02d}")
-            self._timer_decrement_job = self.after(1000, self.decrement_time)
-        elif self.timer_running and current_time == "00:00":
-            self.timer_schedule.rotate(-1)
-            next_up = self.timer_schedule[0]
-            self.current_timer_label.set(next_up)
-
-            if next_up == "Pomodoro":
-                self.current_time.set("25:00")
-            elif next_up == "Short Break":
-                self.current_time.set("05:00")
-            elif next_up == "Long Break":
-                self.current_time.set("15:00")
-            
-            self._timer_decrement_job = self.after(1000, self.decrement_time)
-
+    def show_frame(self, container):
+        frame = self.frames[container]
+        frame.tkraise()
 
 app = PomodoroTimer()
 app.mainloop()
